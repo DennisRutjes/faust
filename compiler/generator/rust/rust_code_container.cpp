@@ -98,6 +98,22 @@ void RustCodeContainer::produceInternal()
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
 
+    printf("now now");
+    *fOut << "#![feature(wasm_target_feature)]" << "\n";
+    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut IN_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut IN_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut OUT_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut OUT_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
     tab(n, *fOut);
     *fOut << "pub struct " << fKlassName << " {";
 
@@ -179,6 +195,31 @@ void RustCodeContainer::produceClass()
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
 
+    *fOut << "#![feature(wasm_target_feature)]" << "\n";
+    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut IN_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut IN_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut OUT_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
+
+    *fOut << "#[no_mangle]" << "\n";
+    *fOut << "pub static mut OUT_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n\n";
+
+    *fOut << "static mut ENGINE " << ": " << fKlassName << " = " << fKlassName << " {";
+    RustInitFieldsVisitor initializer1(fOut, n + 1);
+    generateDeclarations(&initializer1);
+    tab(n, *fOut);
+    *fOut << "};" << "\n\n";
+
+    *fOut << "type T = " << ifloat() << ";\n";
+
+    tab(n, *fOut);
+
     *fOut << "pub struct " << fKlassName << " {";
     tab(n + 1, *fOut);
 
@@ -191,11 +232,11 @@ void RustCodeContainer::produceClass()
     tab(n, *fOut);
 
     tab(n, *fOut);
-    *fOut << "impl FaustDsp for " << fKlassName << " {";
+    *fOut << "impl " << fKlassName << " {";
 
     // Associated type
-    tab(n + 1, *fOut);
-    *fOut << "type T = " << ifloat() << ";";
+    //tab(n + 1, *fOut);
+    //*fOut << "type T = " << ifloat() << ";";
 
     // Memory methods
     tab(n + 2, *fOut);
@@ -235,11 +276,12 @@ void RustCodeContainer::produceClass()
     *fOut << "}";
 
     // Print metadata declaration
-    produceMetadata(n + 1);
+    //produceMetadata(n + 1);
 
     // Get sample rate method
     tab(n + 1, *fOut);
     fCodeProducer.Tab(n + 1);
+    *fOut << "pub " ;
     generateGetSampleRate("get_sample_rate", "&self", false, false)->accept(&fCodeProducer);
 
     produceInfoFunctions(n + 1, "", "&self", false, false, &fCodeProducer);
@@ -272,7 +314,7 @@ void RustCodeContainer::produceClass()
         // Local visitor here to avoid DSP object type wrong generation
         RustInstVisitor codeproducer(fOut, "");
         codeproducer.Tab(n + 2);
-        generateResetUserInterface(&codeproducer);
+        //generateResetUserInterface(&codeproducer);
     }
     back(1, *fOut);
     *fOut << "}";
@@ -313,7 +355,7 @@ void RustCodeContainer::produceClass()
     *fOut << "}";
 
     tab(n + 1, *fOut);
-    *fOut << "fn init(&mut self, sample_rate: i32) {";
+    *fOut << "pub fn init(&mut self, sample_rate: i32) {";
     tab(n + 2, *fOut);
     *fOut << fKlassName << "::class_init(sample_rate);";
     tab(n + 2, *fOut);
@@ -327,24 +369,24 @@ void RustCodeContainer::produceClass()
     auto parameterLookup = parameterMappingVisitor.getParameterLookup();
 
     // User interface (non-static method)
-    tab(n + 1, *fOut);
-    tab(n + 1, *fOut);
-    *fOut << "fn build_user_interface(&self, ui_interface: &mut dyn UI<Self::T>) {";
-    tab(n + 2, *fOut);
-    *fOut << "Self::build_user_interface_static(ui_interface);";
-    tab(n + 1, *fOut);
-    *fOut << "}";
+    // tab(n + 1, *fOut);
+    // tab(n + 1, *fOut);
+    // *fOut << "fn build_user_interface(&self, ui_interface: &mut dyn UI<Self::T>) {";
+    // tab(n + 2, *fOut);
+    // *fOut << "Self::build_user_interface_static(ui_interface);";
+    // tab(n + 1, *fOut);
+    // *fOut << "}";
 
     // User interface (static method)
-    tab(n + 1, *fOut);
-    tab(n + 1, *fOut);
-    *fOut << "fn build_user_interface_static(ui_interface: &mut dyn UI<Self::T>) {";
-    tab(n + 2, *fOut);
-    fCodeProducer.Tab(n + 2);
-    RustUIInstVisitor uiCodeproducer(fOut, "", parameterLookup, n + 2);
-    generateUserInterface(&uiCodeproducer);
-    back(1, *fOut);
-    *fOut << "}";
+    // tab(n + 1, *fOut);
+    // tab(n + 1, *fOut);
+    // *fOut << "fn build_user_interface_static(ui_interface: &mut dyn UI<Self::T>) {";
+    // tab(n + 2, *fOut);
+    // fCodeProducer.Tab(n + 2);
+    // RustUIInstVisitor uiCodeproducer(fOut, "", parameterLookup, n + 2);
+    // generateUserInterface(&uiCodeproducer);
+    // back(1, *fOut);
+    // *fOut << "}";
 
     // Parameter getter/setter
     produceParameterGetterSetter(n + 1, parameterLookup);
@@ -352,9 +394,152 @@ void RustCodeContainer::produceClass()
     // Compute
     generateCompute(n + 1);
 
+    if (fNumInputs == 1) {
+        if (fNumOutputs == 1) {
+            std::string compute_external = R"(
+        #[inline]
+        pub fn compute_external(&mut self, count: i32) {
+            let (inputs, outputs) = unsafe { 
+                (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
+                ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
+            };
+            unsafe { self.compute(count, &[inputs], &mut [outputs]); }
+        })";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        } 
+        else if (fNumOutputs == 2) { 
+            std::string compute_external = R"(
+#[inline]
+pub fn compute_external(&mut self, count: i32) {
+    let (inputs, output0, output1) = unsafe { 
+        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize)) 
+    };
+    unsafe { self.compute(count, &[inputs], &[output0, output1]); }
+})";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        }
+    }
+    else if (fNumInputs == 0) {
+        if (fNumOutputs == 1) {
+            std::string compute_external = R"(
+#[inline]
+pub fn compute_external(&mut self, count: i32) {
+    let outputs = unsafe { 
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)
+    };
+    unsafe { self.compute(count, &[], &[output]); }
+})";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        }
+        else if (fNumOutputs == 2) {
+            std::string compute_external = R"(
+#[inline]
+pub fn compute_external(&mut self, count: i32) {
+    let (output0, output1) = unsafe { 
+        (::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize))
+    };
+    unsafe { self.compute(count, &[], &[output0, output1]); }
+})";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        }
+    }
+    else if (fNumInputs == 2) {
+        if (fNumOutputs == 1) {
+            std::string compute_external = R"(
+#[inline]
+pub fn compute_external(&mut self, count: i32) {
+    let (input0, input1, outputs) = unsafe { 
+        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
+        ::std::slice::from_raw_parts(IN_BUFFER1.as_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
+    };
+    unsafe { self.compute(count, &[input0, input1], &[outputs]); }
+})";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        }
+        else if (fNumOutputs == 2) {
+            std::string compute_external = R"(
+#[inline]
+pub fn compute_external(&mut self, count: i32) {
+    let (input0, input1, output0, output1) = unsafe { 
+        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
+        ::std::slice::from_raw_parts(IN_BUFFER1.as_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
+        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize)) 
+    };
+    unsafe { self.compute(count, &[input0, input1], &[output0, output1]); }
+})";
+            tab(n, *fOut);
+            *fOut << compute_external << "\n";
+        }
+    }
+    
+
     tab(n, *fOut);
     *fOut << "}" << endl;
     tab(n, *fOut);
+
+    // now the Audio Anywhere module
+    std::string module = R"(
+#[no_mangle]
+pub fn get_sample_rate() -> f64 {
+    unsafe { ENGINE.get_sample_rate() as f64 }
+}
+
+// number of input channels (currently max 2)
+#[no_mangle]
+pub fn get_num_input_channels() -> u32 {
+    unsafe { ENGINE.get_num_inputs() as u32 }
+}
+
+// number of output channels (currently max 2)
+#[no_mangle]
+pub fn get_num_output_channels() -> u32 {
+    unsafe { ENGINE.get_num_outputs() as u32 }
+}
+
+#[no_mangle]
+pub fn init(sample_rate: f64) -> () {
+    unsafe { ENGINE.init(sample_rate as i32); }
+}
+
+#[no_mangle]
+pub fn set_param_float(index: u32, v: f32) {
+    unsafe { ENGINE.set_param(index, v); }
+}
+
+#[no_mangle]
+pub fn set_param_int(index: u32, v: i32) {
+    unsafe { ENGINE.set_param(index, v as f32); }
+}
+
+#[no_mangle]
+pub fn get_param_float(index: u32) -> f32 {
+    unsafe { ENGINE.get_param(index) }
+}
+
+#[no_mangle]
+pub fn get_param_int(index: u32) -> i32 {
+    unsafe { ENGINE.get_param(index) as i32 }
+}
+
+#[no_mangle]
+pub fn compute(frames: u32) -> () {
+    unsafe { ENGINE.compute_external(frames as i32); }
+}
+    )";
+
+    tab(n, *fOut);
+
+    *fOut << module;
 }
 
 void RustCodeContainer::produceMetadata(int n)
@@ -392,11 +577,15 @@ void RustCodeContainer::produceInfoFunctions(int tabs, const string& classname, 
                                              TextInstVisitor* producer)
 {
     producer->Tab(tabs);
+    *fOut << "pub " ;
     generateGetInputs(subst("get_num_inputs$0", classname), obj, false, false)->accept(&fCodeProducer);
+    *fOut << "pub " ;
     generateGetOutputs(subst("get_num_outputs$0", classname), obj, false, false)->accept(&fCodeProducer);
     producer->Tab(tabs);
+    *fOut << "pub " ;
     generateGetInputRate(subst("get_input_rate$0", classname), obj, false, false)->accept(&fCodeProducer);
     producer->Tab(tabs);
+    *fOut << "pub " ;
     generateGetOutputRate(subst("get_output_rate$0", classname), obj, false, false)->accept(&fCodeProducer);
 }
 
@@ -405,17 +594,17 @@ void RustCodeContainer::produceParameterGetterSetter(int tabs, map<string, int> 
     // Add `get_param`
     tab(tabs, *fOut);
     tab(tabs, *fOut);
-    *fOut << "fn get_param(&self, param: ParamIndex) -> Option<Self::T> {";
+    *fOut << "pub fn get_param(&self, param: u32) -> T {";
     tab(tabs + 1, *fOut);
-    *fOut << "match param.0 {";
+    *fOut << "match param {";
     for (const auto &paramPair : parameterLookup) {
         const auto fieldName = paramPair.first;
         const auto index = paramPair.second;
         tab(tabs + 2, *fOut);
-        *fOut << index << " => Some(self." << fieldName << "),";
+        *fOut << index << " => self." << fieldName << ",";
     }
     tab(tabs + 2, *fOut);
-    *fOut << "_ => None,";
+    *fOut << "_ => 0.,";
     tab(tabs + 1, *fOut);
     *fOut << "}";
     tab(tabs, *fOut);
@@ -424,9 +613,9 @@ void RustCodeContainer::produceParameterGetterSetter(int tabs, map<string, int> 
     // Add `set_param`
     tab(tabs, *fOut);
     tab(tabs, *fOut);
-    *fOut << "fn set_param(&mut self, param: ParamIndex, value: Self::T) {";
+    *fOut << "pub fn set_param(&mut self, param: u32, value: T) {";
     tab(tabs + 1, *fOut);
-    *fOut << "match param.0 {";
+    *fOut << "match param {";
     for (const auto &paramPair : parameterLookup) {
         const auto fieldName = paramPair.first;
         const auto index = paramPair.second;
@@ -454,8 +643,10 @@ void RustScalarCodeContainer::generateCompute(int n)
     // Generates declaration
     tab(n, *fOut);
     tab(n, *fOut);
-    *fOut << "fn compute("
-          << subst("&mut self, $0: i32, inputs: &[&[Self::T]], outputs: &mut[&mut[Self::T]]) {", fFullCount);
+    *fOut << "#[target_feature(enable = \"simd128\")]" << "\n";
+    *fOut << "#[inline]" << "\n";
+    *fOut << "unsafe fn compute("
+          << subst("&mut self, $0: i32, inputs: &[&[T]], outputs: &mut[&mut[T]]) {", fFullCount);
     tab(n + 1, *fOut);
     fCodeProducer.Tab(n + 1);
 

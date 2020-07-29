@@ -399,11 +399,11 @@ void RustCodeContainer::produceClass()
             std::string compute_external = R"(
         #[inline]
         pub fn compute_external(&mut self, count: i32) {
-            let (inputs, outputs) = unsafe { 
+            let (inputs, mut outputs) = unsafe { 
                 (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
                 ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
             };
-            unsafe { self.compute(count, &[inputs], &mut [outputs]); }
+            unsafe { self.compute(count, &inputs, &mut outputs); }
         })";
             tab(n, *fOut);
             *fOut << compute_external << "\n";
@@ -417,7 +417,7 @@ pub fn compute_external(&mut self, count: i32) {
         ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
         ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize)) 
     };
-    unsafe { self.compute(count, &[inputs], &[output0, output1]); }
+    unsafe { self.compute(count, &inputs, &[output0, output1]); }
 })";
             tab(n, *fOut);
             *fOut << compute_external << "\n";
@@ -431,7 +431,7 @@ pub fn compute_external(&mut self, count: i32) {
     let outputs = unsafe { 
         ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)
     };
-    unsafe { self.compute(count, &[], &[output]); }
+    unsafe { self.compute(count, &output); }
 })";
             tab(n, *fOut);
             *fOut << compute_external << "\n";
@@ -444,7 +444,7 @@ pub fn compute_external(&mut self, count: i32) {
         (::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
         ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize))
     };
-    unsafe { self.compute(count, &[], &[output0, output1]); }
+    unsafe { self.compute(count, &[output0, output1]); }
 })";
             tab(n, *fOut);
             *fOut << compute_external << "\n";
@@ -460,7 +460,7 @@ pub fn compute_external(&mut self, count: i32) {
         ::std::slice::from_raw_parts(IN_BUFFER1.as_ptr(), count as usize),
         ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
     };
-    unsafe { self.compute(count, &[input0, input1], &[outputs]); }
+    unsafe { self.compute(count, &[input0, input1], &outputs); }
 })";
             tab(n, *fOut);
             *fOut << compute_external << "\n";
@@ -643,10 +643,38 @@ void RustScalarCodeContainer::generateCompute(int n)
     // Generates declaration
     tab(n, *fOut);
     tab(n, *fOut);
+    // add WASM simd stuff so we can get it to auto vectorize
     *fOut << "#[target_feature(enable = \"simd128\")]" << "\n";
     *fOut << "#[inline]" << "\n";
-    *fOut << "unsafe fn compute("
-          << subst("&mut self, $0: i32, inputs: &[&[T]], outputs: &mut[&mut[T]]) {", fFullCount);
+    // we special case the 0,1, and 2 inputs and 1, and 2 outputs
+    if (fNumInputs == 0 && fNumOutputs == 1) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, outputs: &mut [T]) {", fFullCount);
+    }
+    if (fNumInputs == 0 && fNumOutputs == 2) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, outputs: &mut [&mut [T];2]) {", fFullCount);
+    }
+    if (fNumInputs == 1 && fNumOutputs == 1) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, inputs: &[T], outputs: &mut [T]) {", fFullCount);
+    }
+    if (fNumInputs == 1 && fNumOutputs == 2) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, inputs: &[T], outputs: &mut [&mut [T];2]) {", fFullCount);
+    }
+    if (fNumInputs == 2 && fNumOutputs == 1) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, inputs: &[&[T];2], outputs: &mut [T]) {", fFullCount);
+    }
+    if (fNumInputs == 2 && fNumOutputs == 2) {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, inputs: &[&[T];2], outputs: &mut [&mut [T];2]) {", fFullCount);
+    }
+    else {
+        *fOut << "unsafe fn compute("
+            << subst("&mut self, $0: i32, inputs: &[&[T]], outputs: &mut[&mut[T]]) {", fFullCount);
+    }
     tab(n + 1, *fOut);
     fCodeProducer.Tab(n + 1);
 

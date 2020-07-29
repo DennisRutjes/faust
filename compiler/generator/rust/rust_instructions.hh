@@ -208,56 +208,86 @@ class RustInstVisitor : public TextInstVisitor {
         
         std::string name = inst->fBufferName;
 
-        // Build pattern matching + if let line
-        *fOut << "let (";
-        for (int i = 0; i < inst->fNumChannels; ++i) {
-            if (i > 0) {
-                *fOut << ", ";
-            }
-            *fOut << name << i;
-        }
-        *fOut << ") = if let [";
-        for (int i = 0; i < inst->fNumChannels; ++i) {
-            *fOut << name << i << ", ";
-        }
-        *fOut << "..] = " << name << " {";
-
-        // Build fixed size iterator variables
-        fTab++;
-        for (int i = 0; i < inst->fNumChannels; ++i) {
-            tab(fTab, *fOut);
-            *fOut << "let " << name << i << " = " << name << i << "[..count as usize]";
+        // special case the case of 1 or 2 channels (we could do this for any number, but currently AA only supports
+        // max of 2 channels)
+        if (inst->fNumChannels == 1) {
+            *fOut << "let " << name << "0 = " ;
+            *fOut << name << "[..count as usize]";
             if (inst->fMutable) {
-                *fOut << ".iter_mut();";
+                    *fOut << ".iter_mut();";
             } else {
                 *fOut << ".iter();";
             }
+            tab(fTab, *fOut);
         }
-
-        // Build return tuple
-        tab(fTab, *fOut);
-        *fOut << "(";
-        for (int i = 0; i < inst->fNumChannels; ++i) {
-            if (i > 0) {
-                *fOut << ", ";
+        else if (inst->fNumChannels == 2) {
+            *fOut << "let (" << name << "0, " << name << "1) = (" ;
+            *fOut << name << "[0][..count as usize]";
+            if (inst->fMutable) {
+                    *fOut << ".iter_mut();";
+            } else {
+                *fOut << ".iter(), ";
             }
-            *fOut << name << i;
+            *fOut << name << "[1][..count as usize]";
+            if (inst->fMutable) {
+                    *fOut << ".iter_mut();";
+            } else {
+                *fOut << ".iter()) ";
+            }
+            tab(fTab, *fOut);
         }
-        *fOut << ")";
+        else {
+            // Build pattern matching + if let line
+            *fOut << "let (";
+            for (int i = 0; i < inst->fNumChannels; ++i) {
+                if (i > 0) {
+                    *fOut << ", ";
+                }
+                *fOut << name << i;
+            }
+            *fOut << ") = if let [";
+            for (int i = 0; i < inst->fNumChannels; ++i) {
+                *fOut << name << i << ", ";
+            }
+            *fOut << "..] = " << name << " {";
 
-        // Build else branch
-        fTab--;
-        tab(fTab, *fOut);
-        *fOut << "} else {";
+            // Build fixed size iterator variables
+            fTab++;
+            for (int i = 0; i < inst->fNumChannels; ++i) {
+                tab(fTab, *fOut);
+                *fOut << "let " << name << i << " = " << name << i << "[..count as usize]";
+                if (inst->fMutable) {
+                    *fOut << ".iter_mut();";
+                } else {
+                    *fOut << ".iter();";
+                }
+            }
 
-        fTab++;
-        tab(fTab, *fOut);
-        *fOut << "panic!(\"wrong number of " << name << "\");";
+            // Build return tuple
+            tab(fTab, *fOut);
+            *fOut << "(";
+            for (int i = 0; i < inst->fNumChannels; ++i) {
+                if (i > 0) {
+                    *fOut << ", ";
+                }
+                *fOut << name << i;
+            }
+            *fOut << ")";
 
-        fTab--;
-        tab(fTab, *fOut);
-        *fOut << "};";
-        tab(fTab, *fOut);
+            // Build else branch
+            fTab--;
+            tab(fTab, *fOut);
+            *fOut << "} else {";
+
+            fTab++;
+            tab(fTab, *fOut);
+            *fOut << "panic!(\"wrong number of " << name << "\");";
+
+            fTab--;
+            tab(fTab, *fOut);
+            *fOut << "};";
+            tab(fTab, *fOut);
+        }
     }
 
     virtual void visit(DeclareFunInst* inst)

@@ -51,6 +51,9 @@ class RustCodeContainer : public virtual CodeContainer {
     }
     virtual ~RustCodeContainer() {}
 
+    void produceAAUnit(int tab);
+    void generateWASMBuffers(int tab);
+    virtual void              generateComputeExternal(int tab) = 0;
     virtual void              produceClass();
     virtual void              generateCompute(int tab) = 0;
     void                      produceInternal();
@@ -73,6 +76,8 @@ class RustScalarCodeContainer : public RustCodeContainer {
     {}
 
     void generateCompute(int tab);
+
+    void generateComputeExternal(int tab);
 };
 
 class RustVectorCodeContainer : public VectorCodeContainer, public RustCodeContainer {
@@ -83,6 +88,7 @@ class RustVectorCodeContainer : public VectorCodeContainer, public RustCodeConta
     {}
 
     void generateCompute(int n);
+    void generateComputeExternal(int tab);
 };
 
 class RustOpenMPCodeContainer : public OpenMPCodeContainer, public RustCodeContainer {
@@ -93,6 +99,7 @@ class RustOpenMPCodeContainer : public OpenMPCodeContainer, public RustCodeConta
     {}
 
     void generateCompute(int tab);
+    void generateComputeExternal(int tab);
 };
 
 class RustWorkStealingCodeContainer : public WSSCodeContainer, public RustCodeContainer {
@@ -103,6 +110,7 @@ class RustWorkStealingCodeContainer : public WSSCodeContainer, public RustCodeCo
     {}
 
     void generateCompute(int tab);
+    void generateComputeExternal(int tab);
 };
 
 #endif

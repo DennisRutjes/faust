@@ -192,100 +192,20 @@ class RustInstVisitor : public TextInstVisitor {
     }
 
     virtual void visit(DeclareBufferIteratorsRust* inst)
-    {
-        /* Generates an expression like:
-        let (outputs0, outputs1) = if let [outputs0, outputs1, ..] = outputs {
-            let outputs0 = outputs0[..count as usize].iter_mut();
-            let outputs1 = outputs1[..count as usize].iter_mut();
-            (outputs0, outputs1)
-        } else {
-            panic!("wrong number of outputs");
-        };
-        */
-        
+    {   
         // Don't generate if no channels
         if (inst->fNumChannels == 0) return;
         
         std::string name = inst->fBufferName;
 
-        // special case the case of 1 or 2 channels (we could do this for any number, but currently AA only supports
-        // max of 2 channels)
-        if (inst->fNumChannels == 1) {
-            *fOut << "let " << name << "0 = " ;
-            *fOut << name << "[..count as usize]";
+        for (int i = 0; i < inst->fNumChannels; i++) {
+            *fOut << "let " << name << i << " = " ;
+            *fOut << name << "[" << i << "][..count as usize]";
             if (inst->fMutable) {
                     *fOut << ".iter_mut();";
             } else {
                 *fOut << ".iter();";
             }
-            tab(fTab, *fOut);
-        }
-        else if (inst->fNumChannels == 2) {
-            *fOut << "let (" << name << "0, " << name << "1) = (" ;
-            *fOut << name << "[0][..count as usize]";
-            if (inst->fMutable) {
-                    *fOut << ".iter_mut();";
-            } else {
-                *fOut << ".iter(), ";
-            }
-            *fOut << name << "[1][..count as usize]";
-            if (inst->fMutable) {
-                    *fOut << ".iter_mut();";
-            } else {
-                *fOut << ".iter()) ";
-            }
-            tab(fTab, *fOut);
-        }
-        else {
-            // Build pattern matching + if let line
-            *fOut << "let (";
-            for (int i = 0; i < inst->fNumChannels; ++i) {
-                if (i > 0) {
-                    *fOut << ", ";
-                }
-                *fOut << name << i;
-            }
-            *fOut << ") = if let [";
-            for (int i = 0; i < inst->fNumChannels; ++i) {
-                *fOut << name << i << ", ";
-            }
-            *fOut << "..] = " << name << " {";
-
-            // Build fixed size iterator variables
-            fTab++;
-            for (int i = 0; i < inst->fNumChannels; ++i) {
-                tab(fTab, *fOut);
-                *fOut << "let " << name << i << " = " << name << i << "[..count as usize]";
-                if (inst->fMutable) {
-                    *fOut << ".iter_mut();";
-                } else {
-                    *fOut << ".iter();";
-                }
-            }
-
-            // Build return tuple
-            tab(fTab, *fOut);
-            *fOut << "(";
-            for (int i = 0; i < inst->fNumChannels; ++i) {
-                if (i > 0) {
-                    *fOut << ", ";
-                }
-                *fOut << name << i;
-            }
-            *fOut << ")";
-
-            // Build else branch
-            fTab--;
-            tab(fTab, *fOut);
-            *fOut << "} else {";
-
-            fTab++;
-            tab(fTab, *fOut);
-            *fOut << "panic!(\"wrong number of " << name << "\");";
-
-            fTab--;
-            tab(fTab, *fOut);
-            *fOut << "};";
             tab(fTab, *fOut);
         }
     }

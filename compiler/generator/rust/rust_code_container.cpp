@@ -183,6 +183,79 @@ void RustCodeContainer::produceInternal()
     *fOut << "}";
 }
 
+void RustCodeContainer::produceAAUnit(int n) {
+    std::string module = R"(
+#[no_mangle]
+pub fn get_sample_rate() -> f64 {
+    unsafe { ENGINE.get_sample_rate() as f64 }
+}
+
+// number of input channels (currently max 2)
+#[no_mangle]
+pub fn get_num_input_channels() -> u32 {
+    unsafe { ENGINE.get_num_inputs() as u32 }
+}
+
+// number of output channels (currently max 2)
+#[no_mangle]
+pub fn get_num_output_channels() -> u32 {
+    unsafe { ENGINE.get_num_outputs() as u32 }
+}
+
+#[no_mangle]
+pub fn init(sample_rate: f64) -> () {
+    unsafe { ENGINE.init(sample_rate as i32); }
+}
+
+#[no_mangle]
+pub fn set_param_float(index: u32, v: f32) {
+    unsafe { ENGINE.set_param(index, v); }
+}
+
+#[no_mangle]
+pub fn set_param_int(index: u32, v: i32) {
+    unsafe { ENGINE.set_param(index, v as f32); }
+}
+
+#[no_mangle]
+pub fn get_param_float(index: u32) -> f32 {
+    unsafe { ENGINE.get_param(index) }
+}
+
+#[no_mangle]
+pub fn get_param_int(index: u32) -> i32 {
+    unsafe { ENGINE.get_param(index) as i32 }
+}
+
+#[no_mangle]
+pub fn compute(frames: u32) -> () {
+    unsafe { ENGINE.compute_external(frames as i32); }
+}
+    )";
+
+    tab(n, *fOut);
+
+    *fOut << module;
+}
+
+void RustCodeContainer::generateWASMBuffers(int n) {
+    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
+
+    for (int i = 0; i < fNumInputs; i++) {
+        tab(n, *fOut);
+        *fOut << "#[no_mangle]";
+        tab(n, *fOut);
+        *fOut << "pub static mut IN_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
+    }
+
+    for (int i = 0; i < fNumOutputs; i++) {
+        tab(n, *fOut);
+        *fOut << "#[no_mangle]";
+        tab(n, *fOut);
+        *fOut << "pub static mut OUT_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
+    }
+}
+
 void RustCodeContainer::produceClass()
 {
     int n = 0;
@@ -195,21 +268,14 @@ void RustCodeContainer::produceClass()
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
 
+    // enable WASM target as this is needed for unstable features
     *fOut << "#![feature(wasm_target_feature)]" << "\n";
-    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
+    
+    // generate global audio buffers 
+    generateWASMBuffers(n);
 
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut IN_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut IN_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut OUT_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut OUT_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n\n";
-
+    // static Buffer for FAUST DSP instance
+    tab(n, *fOut);
     *fOut << "static mut ENGINE " << ": " << fKlassName << " = " << fKlassName << " {";
     RustInitFieldsVisitor initializer1(fOut, n + 1);
     generateDeclarations(&initializer1);
@@ -394,152 +460,15 @@ void RustCodeContainer::produceClass()
     // Compute
     generateCompute(n + 1);
 
-    if (fNumInputs == 1) {
-        if (fNumOutputs == 1) {
-            std::string compute_external = R"(
-        #[inline]
-        pub fn compute_external(&mut self, count: i32) {
-            let (inputs, mut outputs) = unsafe { 
-                (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
-                ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
-            };
-            unsafe { self.compute(count, &inputs, &mut outputs); }
-        })";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        } 
-        else if (fNumOutputs == 2) { 
-            std::string compute_external = R"(
-#[inline]
-pub fn compute_external(&mut self, count: i32) {
-    let (inputs, output0, output1) = unsafe { 
-        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize)) 
-    };
-    unsafe { self.compute(count, &inputs, &[output0, output1]); }
-})";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        }
-    }
-    else if (fNumInputs == 0) {
-        if (fNumOutputs == 1) {
-            std::string compute_external = R"(
-#[inline]
-pub fn compute_external(&mut self, count: i32) {
-    let outputs = unsafe { 
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)
-    };
-    unsafe { self.compute(count, &output); }
-})";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        }
-        else if (fNumOutputs == 2) {
-            std::string compute_external = R"(
-#[inline]
-pub fn compute_external(&mut self, count: i32) {
-    let (output0, output1) = unsafe { 
-        (::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize))
-    };
-    unsafe { self.compute(count, &[output0, output1]); }
-})";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        }
-    }
-    else if (fNumInputs == 2) {
-        if (fNumOutputs == 1) {
-            std::string compute_external = R"(
-#[inline]
-pub fn compute_external(&mut self, count: i32) {
-    let (input0, input1, outputs) = unsafe { 
-        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
-        ::std::slice::from_raw_parts(IN_BUFFER1.as_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize)) 
-    };
-    unsafe { self.compute(count, &[input0, input1], &outputs); }
-})";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        }
-        else if (fNumOutputs == 2) {
-            std::string compute_external = R"(
-#[inline]
-pub fn compute_external(&mut self, count: i32) {
-    let (input0, input1, output0, output1) = unsafe { 
-        (::std::slice::from_raw_parts(IN_BUFFER0.as_ptr(), count as usize),
-        ::std::slice::from_raw_parts(IN_BUFFER1.as_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER0.as_mut_ptr(), count as usize),
-        ::std::slice::from_raw_parts_mut(OUT_BUFFER1.as_mut_ptr(), count as usize)) 
-    };
-    unsafe { self.compute(count, &[input0, input1], &[output0, output1]); }
-})";
-            tab(n, *fOut);
-            *fOut << compute_external << "\n";
-        }
-    }
-    
+    // Compute external
+    generateComputeExternal(n + 1);
 
     tab(n, *fOut);
     *fOut << "}" << endl;
     tab(n, *fOut);
 
     // now the Audio Anywhere module
-    std::string module = R"(
-#[no_mangle]
-pub fn get_sample_rate() -> f64 {
-    unsafe { ENGINE.get_sample_rate() as f64 }
-}
-
-// number of input channels (currently max 2)
-#[no_mangle]
-pub fn get_num_input_channels() -> u32 {
-    unsafe { ENGINE.get_num_inputs() as u32 }
-}
-
-// number of output channels (currently max 2)
-#[no_mangle]
-pub fn get_num_output_channels() -> u32 {
-    unsafe { ENGINE.get_num_outputs() as u32 }
-}
-
-#[no_mangle]
-pub fn init(sample_rate: f64) -> () {
-    unsafe { ENGINE.init(sample_rate as i32); }
-}
-
-#[no_mangle]
-pub fn set_param_float(index: u32, v: f32) {
-    unsafe { ENGINE.set_param(index, v); }
-}
-
-#[no_mangle]
-pub fn set_param_int(index: u32, v: i32) {
-    unsafe { ENGINE.set_param(index, v as f32); }
-}
-
-#[no_mangle]
-pub fn get_param_float(index: u32) -> f32 {
-    unsafe { ENGINE.get_param(index) }
-}
-
-#[no_mangle]
-pub fn get_param_int(index: u32) -> i32 {
-    unsafe { ENGINE.get_param(index) as i32 }
-}
-
-#[no_mangle]
-pub fn compute(frames: u32) -> () {
-    unsafe { ENGINE.compute_external(frames as i32); }
-}
-    )";
-
-    tab(n, *fOut);
-
-    *fOut << module;
+    produceAAUnit(n);
 }
 
 void RustCodeContainer::produceMetadata(int n)
@@ -638,43 +567,80 @@ RustScalarCodeContainer::RustScalarCodeContainer(const string& name, int numInpu
     fSubContainerType = sub_container_type;
 }
 
+void RustScalarCodeContainer::generateComputeExternal(int n) {
+    tab(n, *fOut);
+    *fOut << "#[inline]";
+    tab(n, *fOut);
+    *fOut << "pub fn compute_external(&mut self, count: i32) {";
+    tab(n+1, *fOut);
+    *fOut << "let (";
+    for (int i = 0; i < fNumInputs; i++) {
+        *fOut << "input" << i << ", ";
+    }
+    for (int i = 0; i < fNumOutputs; i++) {
+        *fOut << "output" << i;
+        if (i + 1 != fNumOutputs) {
+            *fOut << ", ";
+        }
+    }
+    *fOut << ") = unsafe {";
+    tab(n+2, *fOut);
+    *fOut << "(";
+    for (int i = 0; i < fNumInputs; i++) {
+        *fOut << "::std::slice::from_raw_parts(IN_BUFFER" << i << ".as_ptr(), count as usize),";
+        tab(n+2, *fOut);
+    }
+    for (int i = 0; i < fNumOutputs; i++) {
+        *fOut << "::std::slice::from_raw_parts_mut(OUT_BUFFER" << i << ".as_mut_ptr(), count as usize)";
+        if (i + 1 != fNumOutputs) {
+            *fOut << ",";
+            tab(n+2, *fOut);
+        }
+    }
+    *fOut << ")";
+    tab(n+1, *fOut);
+    *fOut << "};";
+    tab(n+1, *fOut);
+    *fOut << "unsafe { self.compute(count, &[";
+    for (int i = 0; i < fNumInputs; i++) {
+        *fOut << "input" << i;
+        if (i + 1 != fNumInputs) {
+            *fOut << ", ";
+        }
+    }
+    *fOut << "], &mut [";
+    for (int i = 0; i < fNumOutputs; i++) {
+        *fOut << "output" << i;
+        if (i + 1 != fNumOutputs) {
+            *fOut << ", ";
+        }
+    }
+    *fOut << "]); }";
+
+    tab(n, *fOut);
+    *fOut << "}";
+}
+
 void RustScalarCodeContainer::generateCompute(int n)
 {
     // Generates declaration
     tab(n, *fOut);
-    tab(n, *fOut);
     // add WASM simd stuff so we can get it to auto vectorize
-    *fOut << "#[target_feature(enable = \"simd128\")]" << "\n";
-    *fOut << "#[inline]" << "\n";
-    // we special case the 0,1, and 2 inputs and 1, and 2 outputs
-    if (fNumInputs == 0 && fNumOutputs == 1) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, outputs: &mut [T]) {", fFullCount);
-    }
-    if (fNumInputs == 0 && fNumOutputs == 2) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, outputs: &mut [&mut [T];2]) {", fFullCount);
-    }
-    if (fNumInputs == 1 && fNumOutputs == 1) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, inputs: &[T], outputs: &mut [T]) {", fFullCount);
-    }
-    if (fNumInputs == 1 && fNumOutputs == 2) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, inputs: &[T], outputs: &mut [&mut [T];2]) {", fFullCount);
-    }
-    if (fNumInputs == 2 && fNumOutputs == 1) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, inputs: &[&[T];2], outputs: &mut [T]) {", fFullCount);
-    }
-    if (fNumInputs == 2 && fNumOutputs == 2) {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, inputs: &[&[T];2], outputs: &mut [&mut [T];2]) {", fFullCount);
+    *fOut << "#[target_feature(enable = \"simd128\")]";
+    tab(n, *fOut);
+    *fOut << "#[inline]";
+
+    tab(n, *fOut);
+    *fOut << "unsafe fn compute(&mut self, " << fFullCount << ": i32, ";
+    if (fNumInputs == 0) {
+        *fOut << "inputs: &[T], ";
     }
     else {
-        *fOut << "unsafe fn compute("
-            << subst("&mut self, $0: i32, inputs: &[&[T]], outputs: &mut[&mut[T]]) {", fFullCount);
+        *fOut << "inputs: &[&[T];" << fNumInputs << "], ";
     }
+
+    *fOut << "outputs: &mut [&mut [T];" << fNumOutputs << "]) {";
+
     tab(n + 1, *fOut);
     fCodeProducer.Tab(n + 1);
 
@@ -701,6 +667,11 @@ RustVectorCodeContainer::RustVectorCodeContainer(const string& name, int numInpu
     : VectorCodeContainer(numInputs, numOutputs), RustCodeContainer(name, numInputs, numOutputs, out)
 {
 }
+
+void RustVectorCodeContainer::generateComputeExternal(int n) {
+    
+}
+
 
 void RustVectorCodeContainer::generateCompute(int n)
 {
@@ -732,6 +703,11 @@ RustOpenMPCodeContainer::RustOpenMPCodeContainer(const string& name, int numInpu
 {
 }
 
+void RustOpenMPCodeContainer::generateComputeExternal(int n) {
+    
+}
+
+
 void RustOpenMPCodeContainer::generateCompute(int n)
 {
     // Possibly generate separated functions
@@ -762,6 +738,11 @@ RustWorkStealingCodeContainer::RustWorkStealingCodeContainer(const string& name,
     : WSSCodeContainer(numInputs, numOutputs, "dsp"), RustCodeContainer(name, numInputs, numOutputs, out)
 {
 }
+
+void RustWorkStealingCodeContainer::generateComputeExternal(int n) {
+    
+}
+
 
 void RustWorkStealingCodeContainer::generateCompute(int n)
 {

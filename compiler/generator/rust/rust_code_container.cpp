@@ -182,136 +182,8 @@ void RustCodeContainer::produceInternal()
     *fOut << "}";
 }
 
-void RustCodeContainer::produceAAUnit(int n) {
-    std::string module = R"(
-#[derive(Clone)]
-struct ParamRange {
-    init: f32,
-    min: f32,
-    max: f32,
-    step: f32,
-}
-
-impl ParamRange {
-    pub fn new(init: f32, min: f32, max: f32, step: f32) -> Self {
-        Self {
-            init,
-            min,
-            max,
-            step,
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Param {
-    index: i32,
-    range: ParamRange,
-}
-
-impl Param {
-	pub fn new(name: String, index: i32, range: ParamRange) -> Self {
-		Self {
-            index,
-            range
-		}
-	}
-}
-
-#[no_mangle]
-pub fn get_param_index(length: i32) -> i32 {
-    if length < MAX_PARAM_SIZE as i32 {
-        let mut param = String::new(); 
-        for i in 0..length as usize {
-            let c = unsafe { PARAM_NAME[i] } as char;
-            param.push(c);
-        }
-        return unsafe { ENGINE.get_param_info(&param).index };
-    }
-    else {
-        return -1;
-    }
-}
-
-#[no_mangle]
-pub fn get_gain_index() -> i32 {
-	unsafe { ENGINE.get_param_info("gain").index }
-}
-
-#[no_mangle]
-pub fn get_gate_index() -> i32 {
-	unsafe { ENGINE.get_param_info("gate").index }
-}
-
-#[no_mangle]
-pub fn get_freq_index() -> i32 {
-	unsafe { ENGINE.get_param_info("freq").index }
-}
-
-
-#[no_mangle]
-pub fn get_sample_rate() -> f64 {
-    unsafe { ENGINE.get_sample_rate() as f64 }
-}
-
-// number of input channels (currently max 2)
-#[no_mangle]
-pub fn get_num_input_channels() -> u32 {
-    unsafe { ENGINE.get_num_inputs() as u32 }
-}
-
-// number of output channels (currently max 2)
-#[no_mangle]
-pub fn get_num_output_channels() -> u32 {
-    unsafe { ENGINE.get_num_outputs() as u32 }
-}
-
-#[no_mangle]
-pub fn init(sample_rate: f64) -> () {
-    unsafe { ENGINE.init(sample_rate as i32); }
-}
-
-#[no_mangle]
-pub fn set_param_float(index: u32, v: f32) {
-    unsafe { ENGINE.set_param(index, v); }
-}
-
-#[no_mangle]
-pub fn set_param_int(index: u32, v: i32) {
-    unsafe { ENGINE.set_param(index, v as f32); }
-}
-
-#[no_mangle]
-pub fn get_param_float(index: u32) -> f32 {
-    unsafe { ENGINE.get_param(index) }
-}
-
-#[no_mangle]
-pub fn get_param_int(index: u32) -> i32 {
-    unsafe { ENGINE.get_param(index) as i32 }
-}
-
-#[no_mangle]
-pub fn compute(frames: u32) -> () {
-    unsafe { ENGINE.compute_external(frames as i32); }
-}
-    )";
-
-    tab(n, *fOut);
-
-    *fOut << module;
-}
-
 void RustCodeContainer::generateWASMBuffers(int n) {
-    // tab(n, *fOut);
-    // *fOut << "const MAX_PARAM_SIZE: usize = 1024;";
-    // tab(n, *fOut);
-    // *fOut << "#[no_mangle]";
-    // tab(n, *fOut);
-    // *fOut << "pub static mut PARAM_NAME: [u8;MAX_PARAM_SIZE] = [65;MAX_PARAM_SIZE];";
-    tab(n, *fOut);
-    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
-
+    // inout buffers
     for (int i = 0; i < fNumInputs; i++) {
         tab(n, *fOut);
         *fOut << "#[no_mangle]";
@@ -319,6 +191,7 @@ void RustCodeContainer::generateWASMBuffers(int n) {
         *fOut << "pub static mut IN_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
     }
 
+    // output buffers
     for (int i = 0; i < fNumOutputs; i++) {
         tab(n, *fOut);
         *fOut << "#[no_mangle]";
@@ -330,15 +203,10 @@ void RustCodeContainer::generateWASMBuffers(int n) {
 void RustCodeContainer::produceClass()
 {
     int n = 0;
-    
-    // enable WASM target as this is needed for unstable features
-    // tab(n, *fOut);
-    // *fOut << "#![feature(wasm_target_feature)]" << "\n";
 
     // Sub containers
     generateSubContainers();
 
-    
     tab(n, *fOut);
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
@@ -542,9 +410,6 @@ void RustCodeContainer::produceClass()
     tab(n, *fOut);
     *fOut << "}" << endl;
     tab(n, *fOut);
-
-    // now the Audio Anywhere module
-    //produceAAUnit(n);
 }
 
 void RustCodeContainer::produceMetadata(int n)

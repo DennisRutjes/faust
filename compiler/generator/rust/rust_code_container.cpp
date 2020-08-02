@@ -98,7 +98,6 @@ void RustCodeContainer::produceInternal()
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
 
-    printf("now now");
     *fOut << "#![feature(wasm_target_feature)]" << "\n";
     *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
 
@@ -185,6 +184,71 @@ void RustCodeContainer::produceInternal()
 
 void RustCodeContainer::produceAAUnit(int n) {
     std::string module = R"(
+#[derive(Clone)]
+struct ParamRange {
+    init: f32,
+    min: f32,
+    max: f32,
+    step: f32,
+}
+
+impl ParamRange {
+    pub fn new(init: f32, min: f32, max: f32, step: f32) -> Self {
+        Self {
+            init,
+            min,
+            max,
+            step,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Param {
+    index: i32,
+    range: ParamRange,
+}
+
+impl Param {
+	pub fn new(name: String, index: i32, range: ParamRange) -> Self {
+		Self {
+            index,
+            range
+		}
+	}
+}
+
+#[no_mangle]
+pub fn get_param_index(length: i32) -> i32 {
+    if length < MAX_PARAM_SIZE as i32 {
+        let mut param = String::new(); 
+        for i in 0..length as usize {
+            let c = unsafe { PARAM_NAME[i] } as char;
+            param.push(c);
+        }
+        return unsafe { ENGINE.get_param_info(&param).index };
+    }
+    else {
+        return -1;
+    }
+}
+
+#[no_mangle]
+pub fn get_gain_index() -> i32 {
+	unsafe { ENGINE.get_param_info("gain").index }
+}
+
+#[no_mangle]
+pub fn get_gate_index() -> i32 {
+	unsafe { ENGINE.get_param_info("gate").index }
+}
+
+#[no_mangle]
+pub fn get_freq_index() -> i32 {
+	unsafe { ENGINE.get_param_info("freq").index }
+}
+
+
 #[no_mangle]
 pub fn get_sample_rate() -> f64 {
     unsafe { ENGINE.get_sample_rate() as f64 }
@@ -239,6 +303,13 @@ pub fn compute(frames: u32) -> () {
 }
 
 void RustCodeContainer::generateWASMBuffers(int n) {
+    // tab(n, *fOut);
+    // *fOut << "const MAX_PARAM_SIZE: usize = 1024;";
+    // tab(n, *fOut);
+    // *fOut << "#[no_mangle]";
+    // tab(n, *fOut);
+    // *fOut << "pub static mut PARAM_NAME: [u8;MAX_PARAM_SIZE] = [65;MAX_PARAM_SIZE];";
+    tab(n, *fOut);
     *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
 
     for (int i = 0; i < fNumInputs; i++) {
@@ -259,17 +330,18 @@ void RustCodeContainer::generateWASMBuffers(int n) {
 void RustCodeContainer::produceClass()
 {
     int n = 0;
+    
+    // enable WASM target as this is needed for unstable features
+    // tab(n, *fOut);
+    // *fOut << "#![feature(wasm_target_feature)]" << "\n";
 
     // Sub containers
     generateSubContainers();
 
-    // Functions
+    
     tab(n, *fOut);
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
-
-    // enable WASM target as this is needed for unstable features
-    *fOut << "#![feature(wasm_target_feature)]" << "\n";
     
     // generate global audio buffers 
     generateWASMBuffers(n);
@@ -444,15 +516,19 @@ void RustCodeContainer::produceClass()
     // *fOut << "}";
 
     // User interface (static method)
-    // tab(n + 1, *fOut);
-    // tab(n + 1, *fOut);
-    // *fOut << "fn build_user_interface_static(ui_interface: &mut dyn UI<Self::T>) {";
-    // tab(n + 2, *fOut);
-    // fCodeProducer.Tab(n + 2);
-    // RustUIInstVisitor uiCodeproducer(fOut, "", parameterLookup, n + 2);
-    // generateUserInterface(&uiCodeproducer);
-    // back(1, *fOut);
-    // *fOut << "}";
+    tab(n + 1, *fOut);
+    *fOut << "fn get_param_info(&mut self, name: &str) -> Param {";
+    tab(n + 2, *fOut);
+    *fOut << "match name {";
+    tab(n + 3, *fOut);
+    fCodeProducer.Tab(n + 3);
+    RustUIInstVisitor uiCodeproducer(fOut, "", parameterLookup, n + 3);
+    generateUserInterface(&uiCodeproducer);
+    *fOut << "_ => Param { index: -1, range: ParamRange::new(0.0, 0.0, 0.0, 0.0)}";
+    tab(n + 2, *fOut);
+    *fOut << "}";
+    tab(n + 1, *fOut);
+    *fOut << "}";
 
     // Parameter getter/setter
     produceParameterGetterSetter(n + 1, parameterLookup);
@@ -468,7 +544,7 @@ void RustCodeContainer::produceClass()
     tab(n, *fOut);
 
     // now the Audio Anywhere module
-    produceAAUnit(n);
+    //produceAAUnit(n);
 }
 
 void RustCodeContainer::produceMetadata(int n)

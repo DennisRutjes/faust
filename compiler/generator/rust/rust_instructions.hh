@@ -198,16 +198,62 @@ class RustInstVisitor : public TextInstVisitor {
         
         std::string name = inst->fBufferName;
 
+        // do input channels first
         for (int i = 0; i < inst->fNumChannels; i++) {
-            *fOut << "let " << name << i << " = " ;
-            *fOut << name << "[" << i << "][..count as usize]";
-            if (inst->fMutable) {
-                    *fOut << ".iter_mut();";
-            } else {
+            if (!inst->fMutable) {
+                *fOut << "let " << name << i << " = " ;
+                *fOut << name << "[" << i << "][..count as usize]";
                 *fOut << ".iter();";
+                tab(fTab, *fOut);
             }
-            tab(fTab, *fOut);
         }
+
+        // now outputs
+        *fOut << "let [";
+        for (int i = 0; i < inst->fNumChannels; i++) {
+            if (inst->fMutable) {
+                *fOut << name << i;
+                if (i + 1 != inst->fNumChannels) {
+                    *fOut << ", ";
+                }
+            }
+        }
+        *fOut << "] = " << name << ";";
+        tab(fTab, *fOut);
+        *fOut << "let (";
+        for (int i = 0; i < inst->fNumChannels; i++) {
+            if (inst->fMutable) {
+                *fOut << name << i;
+                if (i + 1 != inst->fNumChannels) {
+                    *fOut << ", ";
+                }
+            }
+        }
+        *fOut << ") = {";
+        tab(fTab+1, *fOut);
+        for (int i = 0; i < inst->fNumChannels; i++) {
+            if (inst->fMutable) {
+                *fOut << "let " << name << i << " = " ;
+                *fOut << name << i << "[..count as usize]";
+                *fOut << ".iter_mut();";
+                tab(fTab+1, *fOut);
+            }
+        }
+        *fOut << "(";
+        for (int i = 0; i < inst->fNumChannels; i++) {
+            if (inst->fMutable) {
+                //tab(fTab+1, *fOut);
+                *fOut << name << i;
+                if (i + 1 != inst->fNumChannels) {
+                    *fOut << ", ";
+                }
+            }
+        }
+        *fOut << ")";
+        tab(fTab, *fOut);
+        *fOut << "};";
+        tab(fTab, *fOut);
+        
     }
 
     virtual void visit(DeclareFunInst* inst)
@@ -637,10 +683,10 @@ class RustUIInstVisitor : public TextInstVisitor {
     {
         // Special case
         if (inst->fZone == "0") {
-            *fOut << "ui_interface.declare(None, " << quote(inst->fKey) << ", " << quote(inst->fValue)
+            *fOut << "self.ui_interface.declare(None, " << quote(inst->fKey) << ", " << quote(inst->fValue)
                   << ")";
         } else {
-            *fOut << "ui_interface.declare(Some(ParamIndex(" << getParameterIndex(inst->fZone) << ")), " << quote(inst->fKey) << ", "
+            *fOut << "self.ui_interface.declare(Some(" << getParameterIndex(inst->fZone) << "), " << quote(inst->fKey) << ", "
                   << quote(inst->fValue) << ")";
         }
         EndLine();
@@ -651,53 +697,67 @@ class RustUIInstVisitor : public TextInstVisitor {
         string name;
         switch (inst->fOrient) {
             case OpenboxInst::kVerticalBox:
-                name = "ui_interface.open_vertical_box(";
+                name = "self.ui_interface.open_vertical_box(";
                 break;
             case OpenboxInst::kHorizontalBox:
-                name = "ui_interface.open_horizontal_box(";
+                name = "self.ui_interface.open_horizontal_box(";
                 break;
             case OpenboxInst::kTabBox:
-                name = "ui_interface.open_tab_box(";
+                name = "self.ui_interface.open_tab_box(";
                 break;
         }
-        *fOut << name << quote(inst->fName) << ")";
-        EndLine();
+        //*fOut << name << quote(inst->fName) << ")";
+        //EndLine();
     }
 
     virtual void visit(CloseboxInst* inst)
     {
-        *fOut << "ui_interface.close_box();";
+        //*fOut << "self.ui_interface.close_box();";
         tab(fTab, *fOut);
     }
 
     virtual void visit(AddButtonInst* inst)
     {
-        if (inst->fType == AddButtonInst::kDefaultButton) {
-            *fOut << "ui_interface.add_button(" << quote(inst->fLabel) << ", ParamIndex(" << getParameterIndex(inst->fZone) << "))";
-        } else {
-            *fOut << "ui_interface.add_check_button(" << quote(inst->fLabel) << ", ParamIndex(" << getParameterIndex(inst->fZone) << "))";
-        }
-        EndLine();
+        *fOut << quote(inst->fLabel) 
+              << " => Param { index: " 
+              << getParameterIndex(inst->fZone) << ", "
+              << "range: ParamRange::new(0.0,0.0,0.0,0.0) }," ;
+        tab(fTab, *fOut);
+
+        // if (inst->fType == AddButtonInst::kDefaultButton) {
+        //     *fOut << "self.ui_interface.add_button(" << quote(inst->fLabel) << ", " << getParameterIndex(inst->fZone) << ")";
+        // } else {
+        //     *fOut << "self.ui_interface.add_check_button(" << quote(inst->fLabel) << ", " << getParameterIndex(inst->fZone) << ")";
+        // }
+        // EndLine();
     }
 
     virtual void visit(AddSliderInst* inst)
     {
         string name;
-        switch (inst->fType) {
-            case AddSliderInst::kHorizontal:
-                name = "ui_interface.add_horizontal_slider";
-                break;
-            case AddSliderInst::kVertical:
-                name = "ui_interface.add_vertical_slider";
-                break;
-            case AddSliderInst::kNumEntry:
-                name = "ui_interface.add_num_entry";
-                break;
-        }
-        *fOut << name << "(" << quote(inst->fLabel) << ", "
-              << "ParamIndex(" << getParameterIndex(inst->fZone) << "), " << checkReal(inst->fInit) << ", " << checkReal(inst->fMin) << ", "
-              << checkReal(inst->fMax) << ", " << checkReal(inst->fStep) << ")";
-        EndLine();
+        *fOut << quote(inst->fLabel) 
+              << " => Param { index: " 
+              << getParameterIndex(inst->fZone) << ", "
+              << "range: ParamRange::new(" << checkReal(inst->fInit) << ", " 
+              << checkReal(inst->fMin) << ", "
+              << checkReal(inst->fMax) << ", " 
+              << checkReal(inst->fStep) << ") },";
+        tab(fTab, *fOut);
+        // switch (inst->fType) {
+        //     case AddSliderInst::kHorizontal:
+        //         name = "self.ui_interface.add_horizontal_slider";
+        //         break;
+        //     case AddSliderInst::kVertical:
+        //         name = "self.ui_interface.add_vertical_slider";
+        //         break;
+        //     case AddSliderInst::kNumEntry:
+        //         name = "self.ui_interface.add_num_entry";
+        //         break;
+        // }
+        // *fOut << name << "(" << quote(inst->fLabel) << ", "
+        //       << getParameterIndex(inst->fZone) << ", " << checkReal(inst->fInit) << ", " << checkReal(inst->fMin) << ", "
+        //       << checkReal(inst->fMax) << ", " << checkReal(inst->fStep) << ")";
+        // EndLine();
     }
 
     virtual void visit(AddBargraphInst* inst)
@@ -705,13 +765,13 @@ class RustUIInstVisitor : public TextInstVisitor {
         string name;
         switch (inst->fType) {
             case AddBargraphInst::kHorizontal:
-                name = "ui_interface.add_horizontal_bargraph";
+                name = "self.ui_interface.add_horizontal_bargraph";
                 break;
             case AddBargraphInst::kVertical:
-                name = "ui_interface.add_vertical_bargraph";
+                name = "self.ui_interface.add_vertical_bargraph";
                 break;
         }
-        *fOut << name << "(" << quote(inst->fLabel) << ", ParamIndex(" << getParameterIndex(inst->fZone) << "), " << checkReal(inst->fMin)
+        *fOut << name << "(" << quote(inst->fLabel) << ", " << getParameterIndex(inst->fZone) << ", " << checkReal(inst->fMin)
               << ", " << checkReal(inst->fMax) << ")";
         EndLine();
     }

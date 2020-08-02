@@ -26,6 +26,8 @@
 #include "floats.hh"
 #include "global.hh"
 
+#include <regex>
+
 using namespace std;
 
 /*
@@ -283,6 +285,7 @@ void RustCodeContainer::produceClass()
 
     // Print metadata declaration
     //produceMetadata(n + 1);
+    produceOptions(n + 1);
 
     // Get sample rate method
     tab(n + 1, *fOut);
@@ -410,6 +413,38 @@ void RustCodeContainer::produceClass()
     tab(n, *fOut);
     *fOut << "}" << endl;
     tab(n, *fOut);
+}
+
+void RustCodeContainer::produceOptions(int n)
+{
+    tab(n, *fOut);
+    *fOut << "pub fn get_voices(&self) -> i32 { ";
+
+    bool voices_found = false;
+    // We do not want to accumulate metadata from all hierachical levels, so the upper level only is kept
+    for (auto& i : gGlobal->gMetaDataSet) {
+        if (i.first == tree("aavoices")) {
+            tab(n + 1, *fOut);
+            *fOut << "if let Ok(i) = " << **(i.second.begin()) << ".to_string().parse::<i32>() {";
+            tab(n + 2, *fOut);
+            *fOut << "i";
+            tab(n + 1, *fOut);
+            *fOut << "} else {";
+            tab(n + 2, *fOut);
+            *fOut << "1";
+            tab(n + 1, *fOut);
+            *fOut << "}";
+            voices_found = true;
+            break;
+        } 
+    }
+    if (!voices_found) {
+        tab(n + 1, *fOut);
+        *fOut << "1";
+    }
+
+    tab(n, *fOut);
+    *fOut << "}" << endl;
 }
 
 void RustCodeContainer::produceMetadata(int n)

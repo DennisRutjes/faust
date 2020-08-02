@@ -198,62 +198,73 @@ class RustInstVisitor : public TextInstVisitor {
         
         std::string name = inst->fBufferName;
 
-        // do input channels first
+        bool is_input = false;
         for (int i = 0; i < inst->fNumChannels; i++) {
             if (!inst->fMutable) {
-                *fOut << "let " << name << i << " = " ;
-                *fOut << name << "[" << i << "][..count as usize]";
-                *fOut << ".iter();";
-                tab(fTab, *fOut);
+                is_input = true;
+                break;
             }
         }
 
-        // now outputs
-        *fOut << "let [";
-        for (int i = 0; i < inst->fNumChannels; i++) {
-            if (inst->fMutable) {
-                *fOut << name << i;
-                if (i + 1 != inst->fNumChannels) {
-                    *fOut << ", ";
+        if (is_input) {
+            // do input channels first
+            for (int i = 0; i < inst->fNumChannels; i++) {
+                if (!inst->fMutable) {
+                    *fOut << "let " << name << i << " = " ;
+                    *fOut << name << "[" << i << "][..count as usize]";
+                    *fOut << ".iter();";
+                    tab(fTab, *fOut);
                 }
             }
         }
-        *fOut << "] = " << name << ";";
-        tab(fTab, *fOut);
-        *fOut << "let (";
-        for (int i = 0; i < inst->fNumChannels; i++) {
-            if (inst->fMutable) {
-                *fOut << name << i;
-                if (i + 1 != inst->fNumChannels) {
-                    *fOut << ", ";
-                }
-            }
-        }
-        *fOut << ") = {";
-        tab(fTab+1, *fOut);
-        for (int i = 0; i < inst->fNumChannels; i++) {
-            if (inst->fMutable) {
-                *fOut << "let " << name << i << " = " ;
-                *fOut << name << i << "[..count as usize]";
-                *fOut << ".iter_mut();";
-                tab(fTab+1, *fOut);
-            }
-        }
-        *fOut << "(";
-        for (int i = 0; i < inst->fNumChannels; i++) {
-            if (inst->fMutable) {
-                //tab(fTab+1, *fOut);
-                *fOut << name << i;
-                if (i + 1 != inst->fNumChannels) {
-                    *fOut << ", ";
-                }
-            }
-        }
-        *fOut << ")";
-        tab(fTab, *fOut);
-        *fOut << "};";
-        tab(fTab, *fOut);
+        else {
         
+            // now outputs
+            *fOut << "let [";
+            for (int i = 0; i < inst->fNumChannels; i++) {
+                if (inst->fMutable) {
+                    *fOut << name << i;
+                    if (i + 1 != inst->fNumChannels) {
+                        *fOut << ", ";
+                    }
+                }
+            }
+            *fOut << "] = " << name << ";";
+            tab(fTab, *fOut);
+            *fOut << "let (";
+            for (int i = 0; i < inst->fNumChannels; i++) {
+                if (inst->fMutable) {
+                    *fOut << name << i;
+                    if (i + 1 != inst->fNumChannels) {
+                        *fOut << ", ";
+                    }
+                }
+            }
+            *fOut << ") = {";
+            tab(fTab+1, *fOut);
+            for (int i = 0; i < inst->fNumChannels; i++) {
+                if (inst->fMutable) {
+                    *fOut << "let " << name << i << " = " ;
+                    *fOut << name << i << "[..count as usize]";
+                    *fOut << ".iter_mut();";
+                    tab(fTab+1, *fOut);
+                }
+            }
+            *fOut << "(";
+            for (int i = 0; i < inst->fNumChannels; i++) {
+                if (inst->fMutable) {
+                    //tab(fTab+1, *fOut);
+                    *fOut << name << i;
+                    if (i + 1 != inst->fNumChannels) {
+                        *fOut << ", ";
+                    }
+                }
+            }
+            *fOut << ")";
+            tab(fTab, *fOut);
+            *fOut << "};";
+            tab(fTab, *fOut);
+        }
     }
 
     virtual void visit(DeclareFunInst* inst)
@@ -682,14 +693,14 @@ class RustUIInstVisitor : public TextInstVisitor {
     virtual void visit(AddMetaDeclareInst* inst)
     {
         // Special case
-        if (inst->fZone == "0") {
-            *fOut << "self.ui_interface.declare(None, " << quote(inst->fKey) << ", " << quote(inst->fValue)
-                  << ")";
-        } else {
-            *fOut << "self.ui_interface.declare(Some(" << getParameterIndex(inst->fZone) << "), " << quote(inst->fKey) << ", "
-                  << quote(inst->fValue) << ")";
-        }
-        EndLine();
+        // if (inst->fZone == "0") {
+        //     *fOut << "self.ui_interface.declare(None, " << quote(inst->fKey) << ", " << quote(inst->fValue)
+        //           << ")";
+        // } else {
+        //     *fOut << "self.ui_interface.declare(Some(" << getParameterIndex(inst->fZone) << "), " << quote(inst->fKey) << ", "
+        //           << quote(inst->fValue) << ")";
+        // }
+        // EndLine();
     }
 
     virtual void visit(OpenboxInst* inst)

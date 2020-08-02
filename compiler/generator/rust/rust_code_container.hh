@@ -40,6 +40,7 @@ class RustCodeContainer : public virtual CodeContainer {
     RustInstVisitor fCodeProducer;
     std::ostream*   fOut;
 
+    void produceOptions(int n);
     void produceMetadata(int tabs);
 
    public:

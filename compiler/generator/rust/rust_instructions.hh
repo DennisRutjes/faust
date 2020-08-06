@@ -669,6 +669,7 @@ class UserInterfaceParameterMapping : public InstVisitor {
 class RustUIInstVisitor : public TextInstVisitor {
    private:
     map<string, int>      fParameterLookup;
+    string current_voice;
 
     int getParameterIndex(string name) {
         auto parameterIndex = fParameterLookup.find(name);
@@ -717,6 +718,11 @@ class RustUIInstVisitor : public TextInstVisitor {
                 name = "self.ui_interface.open_tab_box(";
                 break;
         }
+        if (inst->fName.compare(0, 7, "aavoice") == 0) {
+            string tmp = inst->fName;
+            tmp.erase(0,7);
+            current_voice = "_v" + tmp;
+        }
         //*fOut << name << quote(inst->fName) << ")";
         //EndLine();
     }
@@ -729,10 +735,18 @@ class RustUIInstVisitor : public TextInstVisitor {
 
     virtual void visit(AddButtonInst* inst)
     {
-        *fOut << quote(inst->fLabel) 
-              << " => Param { index: " 
-              << getParameterIndex(inst->fZone) << ", "
-              << "range: ParamRange::new(0.0,0.0,0.0,0.0) }," ;
+        if (current_voice.length() == 0) {
+            *fOut << quote(inst->fLabel)
+                  << " => Param { index: " 
+                  << getParameterIndex(inst->fZone) << ", "
+                  << "range: ParamRange::new(0.0,0.0,0.0,0.0) }," ;
+        }
+        else {
+            *fOut << "\"" << inst->fLabel << current_voice << "\""
+                  << " => Param { index: " 
+                  << getParameterIndex(inst->fZone) << ", "
+                  << "range: ParamRange::new(0.0,0.0,0.0,0.0) }," ;
+        }
         tab(fTab, *fOut);
 
         // if (inst->fType == AddButtonInst::kDefaultButton) {
@@ -746,13 +760,24 @@ class RustUIInstVisitor : public TextInstVisitor {
     virtual void visit(AddSliderInst* inst)
     {
         string name;
-        *fOut << quote(inst->fLabel) 
-              << " => Param { index: " 
-              << getParameterIndex(inst->fZone) << ", "
-              << "range: ParamRange::new(" << checkReal(inst->fInit) << ", " 
-              << checkReal(inst->fMin) << ", "
-              << checkReal(inst->fMax) << ", " 
-              << checkReal(inst->fStep) << ") },";
+        if (current_voice.length() == 0) {
+            *fOut << quote(inst->fLabel) 
+                << " => Param { index: " 
+                << getParameterIndex(inst->fZone) << ", "
+                << "range: ParamRange::new(" << checkReal(inst->fInit) << ", " 
+                << checkReal(inst->fMin) << ", "
+                << checkReal(inst->fMax) << ", " 
+                << checkReal(inst->fStep) << ") },";
+        }
+        else {
+               *fOut << "\"" << inst->fLabel << current_voice << "\"" 
+                << " => Param { index: " 
+                << getParameterIndex(inst->fZone) << ", "
+                << "range: ParamRange::new(" << checkReal(inst->fInit) << ", " 
+                << checkReal(inst->fMin) << ", "
+                << checkReal(inst->fMax) << ", " 
+                << checkReal(inst->fStep) << ") },";
+        }
         tab(fTab, *fOut);
         // switch (inst->fType) {
         //     case AddSliderInst::kHorizontal:

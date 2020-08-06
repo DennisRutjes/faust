@@ -40,8 +40,13 @@ class RustCodeContainer : public virtual CodeContainer {
     RustInstVisitor fCodeProducer;
     std::ostream*   fOut;
 
-    void produceOptions(int n);
+    void produceVoices(int n, int nVoices);
     void produceMetadata(int tabs);
+    int calculateNumVoices();
+    void generateVoicesDeclarations(int n, int nVoices);
+    void generateVoicesDeclarationInit(int n, int nVoices); 
+    void initVoices(int n, int nVoices); 
+    void handleNoteEvent(int n, int nVoices);
 
    public:
     RustCodeContainer(const string& name, int numInputs, int numOutputs, std::ostream* out)

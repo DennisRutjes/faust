@@ -27,6 +27,7 @@
 #include "global.hh"
 
 #include <regex>
+#include <sstream>
 
 using namespace std;
 
@@ -99,21 +100,6 @@ void RustCodeContainer::produceInternal()
     tab(n, *fOut);
     fCodeProducer.Tab(n);
     generateGlobalDeclarations(&fCodeProducer);
-
-    *fOut << "#![feature(wasm_target_feature)]" << "\n";
-    *fOut << "const MAX_BUFFER_SIZE: usize = 1024;" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut IN_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut IN_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut OUT_BUFFER0: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
-
-    *fOut << "#[no_mangle]" << "\n";
-    *fOut << "pub static mut OUT_BUFFER1: [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];" << "\n";
 
     tab(n, *fOut);
     *fOut << "pub struct " << fKlassName << " {";
@@ -216,11 +202,17 @@ void RustCodeContainer::produceClass()
     // generate global audio buffers 
     generateWASMBuffers(n);
 
+    // determine the number of required voices
+    int nVoices = calculateNumVoices();
+
     // static Buffer for FAUST DSP instance
     tab(n, *fOut);
     *fOut << "static mut ENGINE " << ": " << fKlassName << " = " << fKlassName << " {";
     RustInitFieldsVisitor initializer1(fOut, n + 1);
     generateDeclarations(&initializer1);
+    if (nVoices > 0) {
+        generateVoicesDeclarationInit(n, nVoices);
+    }
     tab(n, *fOut);
     *fOut << "};" << "\n\n";
 
@@ -228,14 +220,17 @@ void RustCodeContainer::produceClass()
 
     tab(n, *fOut);
 
-    *fOut << "pub struct " << fKlassName << " {";
+    *fOut << "struct " << fKlassName << " {";
     tab(n + 1, *fOut);
 
     // Fields
     fCodeProducer.Tab(n + 1);
     generateDeclarations(&fCodeProducer);
-
     back(1, *fOut);
+    if (nVoices > 0) {
+        generateVoicesDeclarations(n, nVoices);
+    }
+    tab(n, *fOut);
     *fOut << "}";
     tab(n, *fOut);
 
@@ -278,6 +273,9 @@ void RustCodeContainer::produceClass()
     *fOut << fKlassName << " {";
     RustInitFieldsVisitor initializer(fOut, n + 3);
     generateDeclarations(&initializer);
+    if (nVoices > 0) {
+        generateVoicesDeclarationInit(n+3, nVoices);
+    }
     tab(n + 2, *fOut);
     *fOut << "}";
     tab(n + 1, *fOut);
@@ -285,7 +283,9 @@ void RustCodeContainer::produceClass()
 
     // Print metadata declaration
     //produceMetadata(n + 1);
-    produceOptions(n + 1);
+    
+    // this will determine the number of voices, if greater than 0, otherwise default is 0
+    produceVoices(n + 1, nVoices);
 
     // Get sample rate method
     tab(n + 1, *fOut);
@@ -323,7 +323,7 @@ void RustCodeContainer::produceClass()
         // Local visitor here to avoid DSP object type wrong generation
         RustInstVisitor codeproducer(fOut, "");
         codeproducer.Tab(n + 2);
-        //generateResetUserInterface(&codeproducer);
+        generateResetUserInterface(&codeproducer);
     }
     back(1, *fOut);
     *fOut << "}";
@@ -369,6 +369,8 @@ void RustCodeContainer::produceClass()
     *fOut << fKlassName << "::class_init(sample_rate);";
     tab(n + 2, *fOut);
     *fOut << "self.instance_init(sample_rate);";
+    tab(n + 2, *fOut);
+    *fOut << "self.init_voices();";
     tab(n + 1, *fOut);
     *fOut << "}";
 
@@ -388,7 +390,7 @@ void RustCodeContainer::produceClass()
 
     // User interface (static method)
     tab(n + 1, *fOut);
-    *fOut << "fn get_param_info(&mut self, name: &str) -> Param {";
+    *fOut << "pub fn get_param_info(&mut self, name: &str) -> Param {";
     tab(n + 2, *fOut);
     *fOut << "match name {";
     tab(n + 3, *fOut);
@@ -400,6 +402,12 @@ void RustCodeContainer::produceClass()
     *fOut << "}";
     tab(n + 1, *fOut);
     *fOut << "}";
+
+    // init voices
+    initVoices(n+1, nVoices);
+    handleNoteEvent(n+1, nVoices);
+
+    
 
     // Parameter getter/setter
     produceParameterGetterSetter(n + 1, parameterLookup);
@@ -415,34 +423,188 @@ void RustCodeContainer::produceClass()
     tab(n, *fOut);
 }
 
-void RustCodeContainer::produceOptions(int n)
+void RustCodeContainer::handleNoteEvent(int n, int nVoices) 
+{
+    tab(n, *fOut);
+
+    if (nVoices > 0) {
+        *fOut << "pub fn handle_note_on(&mut self, mn: Note, vel: f32) {";
+        tab(n+1, *fOut);
+        *fOut << "let mut allocated_voice = 0;";
+        tab(n+1, *fOut);
+        *fOut << "let mut allocated_voice_age = self.voices[allocated_voice].voice_age;";
+        tab(n+1, *fOut);
+        *fOut << "// find the oldest voice to reuse";
+        tab(n+1, *fOut);
+        *fOut << "for i in 1.." << nVoices << " {";
+        tab(n+2, *fOut);
+        *fOut << "let age = self.voices[i].voice_age;";
+        tab(n+2, *fOut);
+        *fOut << "if age < allocated_voice_age {";
+        tab(n+3, *fOut);
+        *fOut << "allocated_voice_age = age;";
+        tab(n+3, *fOut);
+        *fOut << "allocated_voice = i;";
+        tab(n+2, *fOut);
+        *fOut << "}";
+        tab(n+1, *fOut);
+        *fOut << "}";
+
+        tab(n+1, *fOut);
+        *fOut << "// update the VoiceInfo for our chosen voice";
+        tab(n+1, *fOut);
+        *fOut << "self.voices[allocated_voice].channel   = 0;";
+        tab(n+1, *fOut);
+        *fOut << "self.voices[allocated_voice].note      = mn;";
+        tab(n+1, *fOut);
+        *fOut << "self.voices[allocated_voice].voice_age = self.next_allocated_voice_age;";
+        tab(n+1, *fOut);
+		*fOut << "self.next_allocated_voice_age          = self.next_allocated_voice_age + 1;";
+        *fOut << "// set params for choosen voice";
+		tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gate[allocated_voice], 1.0);";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gain[allocated_voice], vel);";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_freq[allocated_voice], to_freq(mn));";
+        tab(n, *fOut);
+        *fOut << "}";
+        
+        tab(n, *fOut);
+        *fOut << "pub fn handle_note_off(&mut self, mn: Note, vel: f32) {";						
+        tab(n+1, *fOut);
+        *fOut << "for voice in 0.." << nVoices << " {";
+        tab(n+2, *fOut);
+        *fOut << "if self.voices[voice].note == mn {";
+        tab(n+3, *fOut);
+        *fOut << "// mark voice as being unused";
+        tab(n+3, *fOut);
+		*fOut << "self.voices[voice].voice_age = self.next_unallocated_voice_age;";
+        tab(n+3, *fOut);
+		*fOut << "self.next_unallocated_voice_age = self.next_unallocated_voice_age + 1;";
+        tab(n+3, *fOut);
+        *fOut << "// set params for choosen voice";
+        tab(n+3, *fOut);
+        *fOut << "self.set_param(self.voice_gate[voice], 0.0);";
+        tab(n+3, *fOut);
+        *fOut << "self.set_param(self.voice_gain[voice], vel);";
+        tab(n+2, *fOut);
+        *fOut << "}";
+
+        tab(n+1, *fOut);
+        *fOut << "}";
+
+        tab(n, *fOut);
+        *fOut << "}";
+        
+    }
+    else {
+        *fOut << "pub fn handle_note_on(&mut self, _mn: Note, _vel: f32) {";
+        tab(n, *fOut);
+        *fOut << "}";
+
+        *fOut << "pub fn handle_note_off(&mut self, _mn: Note, _vel: f32) {";
+        tab(n, *fOut);
+        *fOut << "}";
+    }
+    
+
+
+    
+
+}
+
+void RustCodeContainer::initVoices(int n, int nVoices) 
+{
+    tab(n, *fOut);
+    *fOut << "fn init_voices(&mut self) {";
+    for (int i=0; i < nVoices; i++) {
+        tab(n+1, *fOut);
+        *fOut << "self.voice_freq[" << i << "] = self.get_param_info(\"freq_v" << i << "\").index as u32;";
+        tab(n+1, *fOut);
+        *fOut << "self.voice_gain[" << i << "] = self.get_param_info(\"gain_v" << i << "\").index as u32;";
+        tab(n+1, *fOut);
+        *fOut << "self.voice_gate[" << i << "] = self.get_param_info(\"gate_v" << i << "\").index as u32;";
+    }
+    tab(n, *fOut);
+    *fOut << "}";
+}
+
+void RustCodeContainer::generateVoicesDeclarations(int n, int nVoices) 
+{
+    tab(n+1, *fOut);
+    *fOut << "next_allocated_voice_age: i64,";
+    tab(n+1, *fOut);
+	*fOut << "next_unallocated_voice_age: i64,";
+    tab(n+1, *fOut);
+	*fOut << "voices: [VoiceInfo;" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_freq: [u32;" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_gain: [u32;" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_gate: [u32;" << nVoices << "],";
+}
+
+void RustCodeContainer::generateVoicesDeclarationInit(int n, int nVoices) 
+{
+    tab(n+1, *fOut);
+    *fOut << "next_allocated_voice_age: 1000000000,";
+    tab(n+1, *fOut);
+	*fOut << "next_unallocated_voice_age: 0,";
+    tab(n+1, *fOut);
+	*fOut << "voices: [VoiceInfo {active: false,note: 0,channel: 0,voice_age: 0,};" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_freq: [0;" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_gain: [0;" << nVoices << "],";
+    tab(n+1, *fOut);
+	*fOut << "voice_gate: [0;" << nVoices << "],";
+}
+
+enum STR2INT_ERROR { S_SUCCESS, S_OVERFLOW, S_UNDERFLOW, S_INCONVERTIBLE };
+
+STR2INT_ERROR str2int (int &i, char const *s, int base = 0)
+{
+    char *end;
+    long  l;
+    errno = 0;
+    l = strtol(s, &end, base);
+    if ((errno == ERANGE && l == LONG_MAX) || l > INT_MAX) {
+        return S_OVERFLOW;
+    }
+    if ((errno == ERANGE && l == LONG_MIN) || l < INT_MIN) {
+        return S_UNDERFLOW;
+    }
+    if (*s == '\0' || *end != '\0') {
+        return S_INCONVERTIBLE;
+    }
+    i = l;
+    return S_SUCCESS;
+}
+
+int RustCodeContainer::calculateNumVoices()
+{
+    for (auto& i : gGlobal->gMetaDataSet) {
+        if (i.first == tree("aavoices")) {
+            stringstream my_stream(ios::in|ios::out);
+            my_stream << **(i.second.begin());
+            string str(my_stream.str());
+            str.erase(remove( str.begin(), str.end(), '\"' ),str.end());
+            int nVoices = 0;
+            str2int(nVoices, str.c_str(), 10);
+            return nVoices;
+        } 
+    }
+    return 0;
+}
+
+void RustCodeContainer::produceVoices(int n, int nVoices)
 {
     tab(n, *fOut);
     *fOut << "pub fn get_voices(&self) -> i32 { ";
-
-    bool voices_found = false;
-    // We do not want to accumulate metadata from all hierachical levels, so the upper level only is kept
-    for (auto& i : gGlobal->gMetaDataSet) {
-        if (i.first == tree("aavoices")) {
-            tab(n + 1, *fOut);
-            *fOut << "if let Ok(i) = " << **(i.second.begin()) << ".to_string().parse::<i32>() {";
-            tab(n + 2, *fOut);
-            *fOut << "i";
-            tab(n + 1, *fOut);
-            *fOut << "} else {";
-            tab(n + 2, *fOut);
-            *fOut << "1";
-            tab(n + 1, *fOut);
-            *fOut << "}";
-            voices_found = true;
-            break;
-        } 
-    }
-    if (!voices_found) {
-        tab(n + 1, *fOut);
-        *fOut << "1";
-    }
-
+    tab(n + 1, *fOut);
+    *fOut << nVoices;
     tab(n, *fOut);
     *fOut << "}" << endl;
 }

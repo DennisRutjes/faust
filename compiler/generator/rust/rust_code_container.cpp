@@ -427,7 +427,7 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
 {
     tab(n, *fOut);
 
-    if (nVoices > 0) {
+    if (nVoices > 1) {
         *fOut << "pub fn handle_note_on(&mut self, mn: Note, vel: f32) {";
         tab(n+1, *fOut);
         *fOut << "let mut allocated_voice = 0;";
@@ -436,7 +436,7 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
         tab(n+1, *fOut);
         *fOut << "// find the oldest voice to reuse";
         tab(n+1, *fOut);
-        *fOut << "for i in 1.." << nVoices << " {";
+        *fOut << "for i in 0.." << nVoices << " {";
         tab(n+2, *fOut);
         *fOut << "let age = self.voices[i].voice_age;";
         tab(n+2, *fOut);
@@ -494,6 +494,32 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
         tab(n+1, *fOut);
         *fOut << "}";
 
+        tab(n, *fOut);
+        *fOut << "}";
+        
+    }
+    else if (nVoices == 1) {
+        *fOut << "pub fn handle_note_on(&mut self, mn: Note, vel: f32) {";
+        tab(n+1, *fOut);
+        *fOut << "// set params for voice";
+		tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gate[0], 1.0);";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gain[0], vel);";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_freq[0], to_freq(mn));";
+        tab(n, *fOut);
+        *fOut << "}";
+        
+        tab(n, *fOut);
+        *fOut << "pub fn handle_note_off(&mut self, mn: Note, vel: f32) {";						
+        tab(n+1, *fOut);
+        *fOut << "// set params for voice";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gate[0], 0.0);";
+        tab(n+1, *fOut);
+        *fOut << "self.set_param(self.voice_gain[0], vel);";
+        tab(n+2, *fOut);
         tab(n, *fOut);
         *fOut << "}";
         

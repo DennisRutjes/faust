@@ -581,7 +581,7 @@ void RustCodeContainer::initBuffers(int n)
         tab(n+2, *fOut);
         *fOut << "INPUTS[" << i << "] = IN_BUFFER" << i << ".as_ptr();";
     }
-    for (int i=0; i < fNumInputs; i++) {
+    for (int i=0; i < fNumOutputs; i++) {
         tab(n+2, *fOut);
         *fOut << "OUTPUTS[" << i << "] = OUT_BUFFER" << i << ".as_mut_ptr();";
     }

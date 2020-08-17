@@ -186,6 +186,14 @@ void RustCodeContainer::generateWASMBuffers(int n) {
         tab(n, *fOut);
         *fOut << "pub static mut OUT_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
     }
+
+    tab(n, *fOut);
+    *fOut << "static mut INPUTS: [* const f32;" << fNumInputs 
+          << "] = [0 as * const f32; " << fNumInputs << "];";
+
+    tab(n, *fOut);
+    *fOut << "static mut OUTPUTS: [* mut f32;" << fNumOutputs 
+          << "] = [0 as * mut f32; " << fNumOutputs << "];";
 }
 
 void RustCodeContainer::produceClass()
@@ -287,6 +295,8 @@ void RustCodeContainer::produceClass()
     // this will determine the number of voices, if greater than 0, otherwise default is 0
     produceVoices(n + 1, nVoices);
 
+    produceSetGetBuffers(n + 1);
+
     // Get sample rate method
     tab(n + 1, *fOut);
     fCodeProducer.Tab(n + 1);
@@ -371,6 +381,8 @@ void RustCodeContainer::produceClass()
     *fOut << "self.instance_init(sample_rate);";
     tab(n + 2, *fOut);
     *fOut << "self.init_voices();";
+    tab(n + 2, *fOut);
+    *fOut << "self.init_buffers();";
     tab(n + 1, *fOut);
     *fOut << "}";
 
@@ -407,6 +419,7 @@ void RustCodeContainer::produceClass()
     initVoices(n+1, nVoices);
     handleNoteEvent(n+1, nVoices);
 
+    initBuffers(n+1);
     
 
     // Parameter getter/setter
@@ -468,7 +481,7 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
         tab(n+1, *fOut);
         *fOut << "self.set_param(self.voice_freq[allocated_voice], to_freq(mn));";
         tab(n, *fOut);
-        *fOut << "}";
+        *fOut << "}" << endl;
         
         tab(n, *fOut);
         *fOut << "pub fn handle_note_off(&mut self, mn: Note, vel: f32) {";						
@@ -495,7 +508,7 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
         *fOut << "}";
 
         tab(n, *fOut);
-        *fOut << "}";
+        *fOut << "}" << endl;
         
     }
     else if (nVoices == 1) {
@@ -552,6 +565,30 @@ void RustCodeContainer::initVoices(int n, int nVoices)
         tab(n+1, *fOut);
         *fOut << "self.voice_gate[" << i << "] = self.get_param_info(\"gate_v" << i << "\").index as u32;";
     }
+    tab(n, *fOut);
+    *fOut << "}";
+}
+
+void RustCodeContainer::initBuffers(int n) 
+{
+    tab(n, *fOut);
+    *fOut << "fn init_buffers(&self) {";
+    
+    tab(n+1, *fOut);
+    *fOut << "unsafe {" ;
+
+    for (int i=0; i < fNumInputs; i++) {
+        tab(n+2, *fOut);
+        *fOut << "INPUTS[" << i << "] = IN_BUFFER" << i << ".as_ptr();";
+    }
+    for (int i=0; i < fNumInputs; i++) {
+        tab(n+2, *fOut);
+        *fOut << "OUTPUTS[" << i << "] = OUT_BUFFER" << i << ".as_mut_ptr();";
+    }
+
+    tab(n+1, *fOut);
+    *fOut << "};" ;
+
     tab(n, *fOut);
     *fOut << "}";
 }
@@ -631,6 +668,37 @@ void RustCodeContainer::produceVoices(int n, int nVoices)
     *fOut << "pub fn get_voices(&self) -> i32 { ";
     tab(n + 1, *fOut);
     *fOut << nVoices;
+    tab(n, *fOut);
+    *fOut << "}" << endl;
+}
+
+void RustCodeContainer::produceSetGetBuffers(int n) 
+{
+    tab(n, *fOut);
+    *fOut << "pub fn get_input(&self, index: u32) -> u32 { ";
+    tab(n + 1, *fOut);
+    *fOut << "unsafe { INPUTS[index as usize] as u32 }";
+    tab(n, *fOut);
+    *fOut << "}" << endl;
+
+    tab(n, *fOut);
+    *fOut << "pub fn get_output(&self, index: u32) -> u32 { ";
+    tab(n + 1, *fOut);
+    *fOut << "unsafe { OUTPUTS[index as usize] as u32 }";
+    tab(n, *fOut);
+    *fOut << "}" << endl;
+
+    tab(n, *fOut);
+    *fOut << "pub fn set_input(&self, index: u32, offset: u32) { ";
+    tab(n + 1, *fOut);
+    *fOut << "unsafe { INPUTS[index as usize] = offset as * const f32; };";
+    tab(n, *fOut);
+    *fOut << "}" << endl;
+
+    tab(n, *fOut);
+    *fOut << "pub fn set_output(&self, index: u32, offset: u32) { ";
+    tab(n + 1, *fOut);
+    *fOut << "unsafe { OUTPUTS[index as usize] = offset as * mut f32; };";
     tab(n, *fOut);
     *fOut << "}" << endl;
 }
@@ -751,11 +819,13 @@ void RustScalarCodeContainer::generateComputeExternal(int n) {
     tab(n+2, *fOut);
     *fOut << "(";
     for (int i = 0; i < fNumInputs; i++) {
-        *fOut << "::std::slice::from_raw_parts(IN_BUFFER" << i << ".as_ptr(), count as usize),";
+        *fOut << "::std::slice::from_raw_parts(INPUTS[" << i << "], count as usize),";
+        //*fOut << "INPUTS[" << i << "],";
         tab(n+2, *fOut);
     }
     for (int i = 0; i < fNumOutputs; i++) {
-        *fOut << "::std::slice::from_raw_parts_mut(OUT_BUFFER" << i << ".as_mut_ptr(), count as usize)";
+        //*fOut << "OUTPUTS[" << i << "]";
+        *fOut << "::std::slice::from_raw_parts_mut(OUTPUTS[" << i << "], count as usize)";
         if (i + 1 != fNumOutputs) {
             *fOut << ",";
             tab(n+2, *fOut);

@@ -41,11 +41,13 @@ class RustCodeContainer : public virtual CodeContainer {
     std::ostream*   fOut;
 
     void produceVoices(int n, int nVoices);
+    void produceSetGetBuffers(int n);
     void produceMetadata(int tabs);
     int calculateNumVoices();
     void generateVoicesDeclarations(int n, int nVoices);
     void generateVoicesDeclarationInit(int n, int nVoices); 
     void initVoices(int n, int nVoices); 
+    void initBuffers(int n); 
     void handleNoteEvent(int n, int nVoices);
 
    public:

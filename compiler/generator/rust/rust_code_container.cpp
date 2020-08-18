@@ -176,7 +176,7 @@ void RustCodeContainer::generateWASMBuffers(int n) {
         tab(n, *fOut);
         *fOut << "#[no_mangle]";
         tab(n, *fOut);
-        *fOut << "pub static mut IN_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
+        *fOut << "static mut IN_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
     }
 
     // output buffers
@@ -184,7 +184,7 @@ void RustCodeContainer::generateWASMBuffers(int n) {
         tab(n, *fOut);
         *fOut << "#[no_mangle]";
         tab(n, *fOut);
-        *fOut << "pub static mut OUT_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
+        *fOut << "static mut OUT_BUFFER" << i << ": [f32;MAX_BUFFER_SIZE] = [0.;MAX_BUFFER_SIZE];";
     }
 
     tab(n, *fOut);

@@ -440,7 +440,7 @@ void RustCodeContainer::handleNoteEvent(int n, int nVoices)
 {
     tab(n, *fOut);
 
-    if (nVoices > 1) {
+    if (nVoices > 0) {
         *fOut << "pub fn handle_note_on(&mut self, mn: Note, vel: f32) {";
         tab(n+1, *fOut);
         *fOut << "let mut allocated_voice = 0;";
